@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">YourDocs</string>
+
+    <!-- Home Screen -->
+    <string name="home_title">Your Documents</string>
+    <string name="home_empty_state">No folders yet.\nTap + to create your first folder.</string>
+    <string name="create_folder">Create Folder</string>
+
+    <!-- Folder Operations -->
+    <string name="folder_name">Folder Name</string>
+    <string name="folder_name_hint">Enter folder name</string>
+    <string name="rename_folder">Rename Folder</string>
+    <string name="delete_folder">Delete Folder</string>
+    <string name="delete_folder_confirmation">Delete \"%1$s\" and all its documents?</string>
+    <string name="delete_folder_message">This action cannot be undone.</string>
+    <string name="pin_folder">Pin Folder</string>
+    <string name="unpin_folder">Unpin Folder</string>
+
+    <!-- Document Operations -->
+    <string name="document_count">%d documents</string>
+    <string name="document_count_single">1 document</string>
+    <string name="last_updated">Updated %s</string>
+    <string name="rename_document">Rename Document</string>
+    <string name="delete_document">Delete Document</string>
+    <string name="delete_document_confirmation">Delete \"%1$s\"?</string>
+    <string name="document_name">Document Name</string>
+    <string name="no_documents_yet">No documents yet</string>
+    <string name="tap_plus_to_import">Tap + to import your first document</string>
+
+    <!-- Import -->
+    <string name="import_document">Import Document</string>
+    <string name="import_from_files">Import from Files</string>
+    <string name="import_from_gallery">Import from Gallery</string>
+    <string name="capture_document">Capture Document</string>
+    <string name="importing_document">Importing document\u2026</string>
+
+    <!-- Scanner -->
+    <string name="scanner_unavailable">Scanner unavailable. Check Google Play Services.</string>
+    <string name="scan_saved">Scanned document saved (%d pages)</string>
+    <string name="scan_failed">Failed to save scanned document</string>
+
+    <!-- Actions -->
+    <string name="save">Save</string>
+    <string name="cancel">Cancel</string>
+    <string name="delete">Delete</string>
+    <string name="rename">Rename</string>
+    <string name="create">Create</string>
+    <string name="back">Back</string>
+
+    <!-- Errors -->
+    <string name="error_folder_name_empty">Folder name cannot be empty</string>
+    <string name="error_folder_name_exists">A folder with this name already exists</string>
+    <string name="error_document_name_empty">Document name cannot be empty</string>
+    <string name="error_import_failed">Failed to import document</string>
+    <string name="error_file_not_found">File not found</string>
+    <string name="error_no_app_to_open">No app found to open this file</string>
+    <string name="error_generic">Something went wrong. Please try again.</string>
+</resources>

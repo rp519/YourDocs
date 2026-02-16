@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.YourDocs" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:statusBarColor">#FF00796B</item>
+        <item name="android:navigationBarColor">#FF00796B</item>
+    </style>
+</resources>
