@@ -109,6 +109,15 @@ dependencies {
     // Billing
     implementation(libs.google.billing)
 
+    // WorkManager
+    implementation(libs.androidx.work.runtime)
+    implementation(libs.androidx.hilt.work)
+    ksp(libs.androidx.hilt.compiler)
+
+    // Glance (Widget)
+    implementation(libs.androidx.glance.appwidget)
+    implementation(libs.androidx.glance.material3)
+
     // Testing
     testImplementation(libs.junit)
     testImplementation(libs.androidx.test.core)

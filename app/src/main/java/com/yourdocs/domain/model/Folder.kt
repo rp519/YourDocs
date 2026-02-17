@@ -16,10 +16,15 @@ data class Folder(
     val emoji: String? = null,
     val description: String? = null,
     val lockMethod: LockMethod? = null,
+    val sortPreference: SortPreference? = null,
     val createdAt: Instant,
     val updatedAt: Instant
 ) {
     companion object {
         fun generateId(): String = java.util.UUID.randomUUID().toString()
     }
+}
+
+enum class SortPreference {
+    NAME_ASC, NAME_DESC, DATE_NEWEST, DATE_OLDEST, SIZE_LARGEST, SIZE_SMALLEST, TYPE
 }

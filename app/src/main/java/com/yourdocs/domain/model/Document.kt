@@ -14,6 +14,10 @@ data class Document(
     val sizeBytes: Long,
     val source: DocumentSource,
     val pageCount: Int?,
+    val isFavorite: Boolean = false,
+    val lastViewedAt: Instant? = null,
+    val expiryDate: Instant? = null,
+    val notes: String? = null,
     val createdAt: Instant,
     val updatedAt: Instant
 ) {

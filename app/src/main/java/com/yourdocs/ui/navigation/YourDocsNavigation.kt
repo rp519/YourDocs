@@ -48,6 +48,9 @@ fun YourDocsNavigation(
                 onFolderClick = { folderId ->
                     navController.navigate(Screen.Folder.createRoute(folderId))
                 },
+                onDocumentClick = { documentId ->
+                    navController.navigate(Screen.DocumentViewer.createRoute(documentId))
+                },
                 onSettingsClick = {
                     navController.navigate(Screen.Settings.route)
                 },

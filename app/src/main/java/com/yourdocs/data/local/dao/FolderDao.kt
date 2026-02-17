@@ -112,4 +112,7 @@ interface FolderDao {
      */
     @Query("UPDATE folders SET description = :description, updated_at = :updatedAt WHERE id = :folderId")
     suspend fun updateDescription(folderId: String, description: String?, updatedAt: Long)
+
+    @Query("UPDATE folders SET sort_preference = :sortPreference, updated_at = :updatedAt WHERE id = :folderId")
+    suspend fun updateSortPreference(folderId: String, sortPreference: String?, updatedAt: Long)
 }

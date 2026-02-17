@@ -9,6 +9,8 @@ import com.yourdocs.data.local.entity.toEntity
 import com.yourdocs.data.local.storage.FileStorageManager
 import com.yourdocs.domain.model.Document
 import com.yourdocs.domain.model.DocumentSource
+import com.yourdocs.domain.model.DocumentWithFolderInfo
+import com.yourdocs.domain.model.UriMetadata
 import com.yourdocs.domain.repository.DocumentRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -42,14 +44,11 @@ class DocumentRepositoryImpl @Inject constructor(
         pageCount: Int?
     ): Result<Document> = withContext(Dispatchers.IO) {
         try {
-            // Resolve metadata from URI
-            val (resolvedName, sizeBytes, mimeType) = resolveUriMetadata(uri)
-            val displayName = overrideName ?: resolvedName
+            val metadata = resolveUriMetadata(uri)
+            val displayName = overrideName ?: metadata.displayName
 
-            // Generate unique stored filename
             val storedFileName = fileStorageManager.generateUniqueFileName(displayName)
 
-            // Copy file to internal storage
             val inputStream = contentResolver.openInputStream(uri)
                 ?: return@withContext Result.failure(
                     IllegalStateException("Cannot open input stream for URI")
@@ -58,19 +57,17 @@ class DocumentRepositoryImpl @Inject constructor(
             fileStorageManager.saveDocument(inputStream, storedFileName)
                 .onFailure { return@withContext Result.failure(it) }
 
-            // Get actual file size after copy (more reliable for file:// URIs)
-            val actualSize = if (sizeBytes > 0) sizeBytes
+            val actualSize = if (metadata.sizeBytes > 0) metadata.sizeBytes
                 else fileStorageManager.getDocumentSize(storedFileName)
 
-            // Create domain model
             val now = Instant.now()
             val document = Document(
                 id = Document.generateId(),
                 folderId = folderId,
                 originalName = displayName,
                 storedFileName = storedFileName,
-                mimeType = if (overrideName != null && mimeType == "application/octet-stream")
-                    guessMimeType(displayName) else mimeType,
+                mimeType = if (overrideName != null && metadata.mimeType == "application/octet-stream")
+                    guessMimeType(displayName) else metadata.mimeType,
                 sizeBytes = actualSize,
                 source = source,
                 pageCount = pageCount,
@@ -78,7 +75,6 @@ class DocumentRepositoryImpl @Inject constructor(
                 updatedAt = now
             )
 
-            // Insert into DB
             documentDao.insertDocument(document.toEntity())
             Result.success(document)
         } catch (e: Exception) {
@@ -101,11 +97,7 @@ class DocumentRepositoryImpl @Inject constructor(
         return try {
             val entity = documentDao.getDocumentById(documentId)
                 ?: return Result.failure(IllegalArgumentException("Document not found"))
-
-            // Delete physical file first
             fileStorageManager.deleteDocument(entity.storedFileName)
-
-            // Then delete DB record
             documentDao.deleteDocumentById(documentId)
             Result.success(Unit)
         } catch (e: Exception) {
@@ -115,9 +107,8 @@ class DocumentRepositoryImpl @Inject constructor(
 
     override suspend fun moveDocument(documentId: String, newFolderId: String): Result<Unit> {
         return try {
-            val entity = documentDao.getDocumentById(documentId)
+            documentDao.getDocumentById(documentId)
                 ?: return Result.failure(IllegalArgumentException("Document not found"))
-
             val now = Instant.now().toEpochMilli()
             documentDao.moveDocument(documentId, newFolderId, now)
             Result.success(Unit)
@@ -128,9 +119,8 @@ class DocumentRepositoryImpl @Inject constructor(
 
     override suspend fun renameDocument(documentId: String, newName: String): Result<Unit> {
         return try {
-            val entity = documentDao.getDocumentById(documentId)
+            documentDao.getDocumentById(documentId)
                 ?: return Result.failure(IllegalArgumentException("Document not found"))
-
             val now = Instant.now().toEpochMilli()
             documentDao.updateDocumentName(documentId, newName.trim(), now)
             Result.success(Unit)
@@ -139,10 +129,121 @@ class DocumentRepositoryImpl @Inject constructor(
         }
     }
 
-    private fun resolveUriMetadata(uri: Uri): UriMetadata {
+    // Favorites
+
+    override fun observeFavorites(): Flow<List<DocumentWithFolderInfo>> {
+        return documentDao.observeFavorites()
+            .map { list -> list.map { it.toDomain() } }
+    }
+
+    override suspend fun toggleFavorite(documentId: String): Result<Unit> {
+        return try {
+            val entity = documentDao.getDocumentById(documentId)
+                ?: return Result.failure(IllegalArgumentException("Document not found"))
+            val now = Instant.now().toEpochMilli()
+            documentDao.updateFavoriteStatus(documentId, !entity.isFavorite, now)
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    // Recently viewed
+
+    override fun observeRecentlyViewed(): Flow<List<DocumentWithFolderInfo>> {
+        return documentDao.observeRecentlyViewed()
+            .map { list -> list.map { it.toDomain() } }
+    }
+
+    override suspend fun markAsViewed(documentId: String): Result<Unit> {
+        return try {
+            val now = Instant.now().toEpochMilli()
+            documentDao.updateLastViewedAt(documentId, now)
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    // Expiry
+
+    override fun observeExpiringSoon(): Flow<List<DocumentWithFolderInfo>> {
+        val thresholdMillis = Instant.now().plusSeconds(30L * 24 * 60 * 60).toEpochMilli()
+        return documentDao.observeExpiringSoon(thresholdMillis)
+            .map { list -> list.map { it.toDomain() } }
+    }
+
+    override suspend fun setExpiryDate(documentId: String, expiryDate: Instant?): Result<Unit> {
+        return try {
+            val now = Instant.now().toEpochMilli()
+            documentDao.updateExpiryDate(documentId, expiryDate?.toEpochMilli(), now)
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun getDocumentsWithExpiry(): List<Document> {
+        return documentDao.getDocumentsWithExpiry().map { it.toDomain() }
+    }
+
+    // Notes
+
+    override suspend fun updateNotes(documentId: String, notes: String?): Result<Unit> {
+        return try {
+            val now = Instant.now().toEpochMilli()
+            documentDao.updateNotes(documentId, notes, now)
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    // Quick search
+
+    override fun searchDocuments(query: String): Flow<List<DocumentWithFolderInfo>> {
+        return documentDao.searchDocuments(query)
+            .map { list -> list.map { it.toDomain() } }
+    }
+
+    // Duplicate detection
+
+    override suspend fun findDuplicate(folderId: String, name: String, sizeBytes: Long): Document? {
+        return documentDao.findDuplicate(folderId, name, sizeBytes)?.toDomain()
+    }
+
+    // Multi-select
+
+    override suspend fun deleteDocuments(ids: List<String>): Result<Unit> {
+        return try {
+            ids.forEach { id ->
+                documentDao.getDocumentById(id)?.let { entity ->
+                    fileStorageManager.deleteDocument(entity.storedFileName)
+                }
+            }
+            documentDao.deleteDocumentsByIds(ids)
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun moveDocuments(ids: List<String>, newFolderId: String): Result<Unit> {
+        return try {
+            val now = Instant.now().toEpochMilli()
+            documentDao.moveDocuments(ids, newFolderId, now)
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    // URI metadata resolution
+
+    override suspend fun resolveUriMetadata(uri: Uri): UriMetadata {
         var displayName = "unknown"
         var sizeBytes = 0L
-        var mimeType = contentResolver.getType(uri) ?: "application/octet-stream"
+        val mimeType = contentResolver.getType(uri) ?: "application/octet-stream"
 
         contentResolver.query(uri, null, null, null, null)?.use { cursor ->
             if (cursor.moveToFirst()) {
@@ -159,10 +260,4 @@ class DocumentRepositoryImpl @Inject constructor(
 
         return UriMetadata(displayName, sizeBytes, mimeType)
     }
-
-    private data class UriMetadata(
-        val displayName: String,
-        val sizeBytes: Long,
-        val mimeType: String
-    )
 }

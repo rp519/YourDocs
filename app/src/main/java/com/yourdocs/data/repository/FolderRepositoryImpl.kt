@@ -5,6 +5,7 @@ import com.yourdocs.data.local.entity.FolderEntity
 import com.yourdocs.data.local.entity.toDomain
 import com.yourdocs.data.local.entity.toEntity
 import com.yourdocs.domain.model.Folder
+import com.yourdocs.domain.model.SortPreference
 import com.yourdocs.domain.repository.FolderRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -133,6 +134,16 @@ class FolderRepositoryImpl @Inject constructor(
         return try {
             val now = Instant.now().toEpochMilli()
             folderDao.updateDescription(folderId, description?.trim()?.ifEmpty { null }, now)
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun setSortPreference(folderId: String, sort: SortPreference): Result<Unit> {
+        return try {
+            val now = Instant.now().toEpochMilli()
+            folderDao.updateSortPreference(folderId, sort.name, now)
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)

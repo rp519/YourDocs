@@ -9,9 +9,6 @@ import com.yourdocs.domain.model.Document
 import com.yourdocs.domain.model.DocumentSource
 import java.time.Instant
 
-/**
- * Room entity representing a document in the database.
- */
 @Entity(
     tableName = "documents",
     foreignKeys = [
@@ -45,10 +42,22 @@ data class DocumentEntity(
     val sizeBytes: Long,
 
     @ColumnInfo(name = "source")
-    val source: String, // Stored as string to avoid enum issues
+    val source: String,
 
     @ColumnInfo(name = "page_count")
     val pageCount: Int?,
+
+    @ColumnInfo(name = "is_favorite", defaultValue = "0")
+    val isFavorite: Boolean = false,
+
+    @ColumnInfo(name = "last_viewed_at")
+    val lastViewedAt: Long? = null,
+
+    @ColumnInfo(name = "expiry_date")
+    val expiryDate: Long? = null,
+
+    @ColumnInfo(name = "notes")
+    val notes: String? = null,
 
     @ColumnInfo(name = "created_at")
     val createdAt: Long,
@@ -57,7 +66,6 @@ data class DocumentEntity(
     val updatedAt: Long
 )
 
-// Extension functions for mapping
 fun DocumentEntity.toDomain(): Document {
     return Document(
         id = id,
@@ -68,6 +76,10 @@ fun DocumentEntity.toDomain(): Document {
         sizeBytes = sizeBytes,
         source = DocumentSource.valueOf(source),
         pageCount = pageCount,
+        isFavorite = isFavorite,
+        lastViewedAt = lastViewedAt?.let { Instant.ofEpochMilli(it) },
+        expiryDate = expiryDate?.let { Instant.ofEpochMilli(it) },
+        notes = notes,
         createdAt = Instant.ofEpochMilli(createdAt),
         updatedAt = Instant.ofEpochMilli(updatedAt)
     )
@@ -83,6 +95,10 @@ fun Document.toEntity(): DocumentEntity {
         sizeBytes = sizeBytes,
         source = source.name,
         pageCount = pageCount,
+        isFavorite = isFavorite,
+        lastViewedAt = lastViewedAt?.toEpochMilli(),
+        expiryDate = expiryDate?.toEpochMilli(),
+        notes = notes,
         createdAt = createdAt.toEpochMilli(),
         updatedAt = updatedAt.toEpochMilli()
     )

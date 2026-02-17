@@ -9,7 +9,7 @@ By using the App, you agree to be bound by these Terms. If you do not agree to t
 
 ## 1. Description of Service
 
-YourDocs is a mobile application for personal document organization. The App allows you to create folders, import documents, and organize files locally on your device.
+YourDocs is a mobile application for personal document organization. The App allows you to create folders, import and scan documents, organize files with tags and notes, set expiry reminders, search across folders, and manage your documents locally on your device.
 
 ## 2. Premium Purchase
 
@@ -20,11 +20,11 @@ The App offers a one-time premium upgrade ("YourDocs Pro") that unlocks addition
 All sales are final after the Google Play refund window has expired. Refund requests within the eligible window should be directed to Google Play. YourDocs Team does not process refunds directly.
 
 ### 2.3 Premium Features
-Premium features currently include unlimited folders and documents, biometric and PIN folder locking, backup and restore functionality, and custom folder colors. Premium features may be updated, expanded, or modified over time. We reserve the right to add new premium features in future updates at no additional cost to existing Pro users.
+Premium features currently include unlimited folders and documents, biometric and PIN folder locking, backup and restore functionality, custom folder colors, document tags, expiry reminders with notifications, home screen widget, and multi-select document operations. Premium features may be updated, expanded, or modified over time. We reserve the right to add new premium features in future updates at no additional cost to existing Pro users.
 
 ## 3. Free Tier Limitations
 
-Free users may create up to 5 folders and store up to 25 documents. These limits may be adjusted in future updates. Existing data that exceeds any updated limits will not be deleted; only the creation of new items beyond the limit will be restricted.
+Free users may create up to 5 folders and store up to 50 documents. These limits may be adjusted in future updates. Existing data that exceeds any updated limits will not be deleted; only the creation of new items beyond the limit will be restricted.
 
 ## 4. User Responsibilities
 

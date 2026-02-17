@@ -5,6 +5,7 @@ import android.content.Context
 import androidx.room.Room
 import com.yourdocs.data.local.dao.DocumentDao
 import com.yourdocs.data.local.dao.FolderDao
+import com.yourdocs.data.local.dao.TagDao
 import com.yourdocs.data.local.database.YourDocsDatabase
 import dagger.Module
 import dagger.Provides
@@ -27,7 +28,11 @@ object DatabaseModule {
             YourDocsDatabase::class.java,
             YourDocsDatabase.DATABASE_NAME
         )
-            .addMigrations(YourDocsDatabase.MIGRATION_1_2, YourDocsDatabase.MIGRATION_2_3)
+            .addMigrations(
+                YourDocsDatabase.MIGRATION_1_2,
+                YourDocsDatabase.MIGRATION_2_3,
+                YourDocsDatabase.MIGRATION_3_4
+            )
             .build()
     }
 
@@ -39,6 +44,11 @@ object DatabaseModule {
     @Provides
     fun provideDocumentDao(database: YourDocsDatabase): DocumentDao {
         return database.documentDao()
+    }
+
+    @Provides
+    fun provideTagDao(database: YourDocsDatabase): TagDao {
+        return database.tagDao()
     }
 
     @Provides

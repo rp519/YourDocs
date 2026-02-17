@@ -21,6 +21,9 @@ kotlinx-coroutines-test = "1.9.0"
 truth = "1.4.4"
 mockito-kotlin = "5.4.0"
 billing = "7.1.1"
+work = "2.10.0"
+hilt-ext = "1.2.0"
+glance = "1.1.1"
 
 [libraries]
 # Compose BOM
@@ -74,6 +77,15 @@ coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coi
 
 # Billing
 google-billing = { group = "com.android.billingclient", name = "billing-ktx", version.ref = "billing" }
+
+# WorkManager
+androidx-work-runtime = { group = "androidx.work", name = "work-runtime-ktx", version.ref = "work" }
+androidx-hilt-work = { group = "androidx.hilt", name = "hilt-work", version.ref = "hilt-ext" }
+androidx-hilt-compiler = { group = "androidx.hilt", name = "hilt-compiler", version.ref = "hilt-ext" }
+
+# Glance (Widget)
+androidx-glance-appwidget = { group = "androidx.glance", name = "glance-appwidget", version.ref = "glance" }
+androidx-glance-material3 = { group = "androidx.glance", name = "glance-material3", version.ref = "glance" }
 
 # Testing
 junit = { group = "junit", name = "junit", version.ref = "junit" }
