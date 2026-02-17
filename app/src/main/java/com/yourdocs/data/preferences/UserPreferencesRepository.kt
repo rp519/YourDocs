@@ -10,6 +10,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import com.yourdocs.ui.theme.ThemeMode
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -28,6 +29,7 @@ class UserPreferencesRepository @Inject constructor(
         val THEME_MODE = stringPreferencesKey("theme_mode")
         val BIOMETRIC_ENABLED = booleanPreferencesKey("biometric_enabled")
         val SORT_ORDER = stringPreferencesKey("sort_order")
+        val PIN_HASH = stringPreferencesKey("pin_hash")
     }
 
     val themeMode: Flow<ThemeMode> = context.dataStore.data.map { prefs ->
@@ -66,5 +68,25 @@ class UserPreferencesRepository @Inject constructor(
         context.dataStore.edit { prefs ->
             prefs[Keys.SORT_ORDER] = order.name
         }
+    }
+
+    val pinHash: Flow<String?> = context.dataStore.data.map { prefs ->
+        prefs[Keys.PIN_HASH]
+    }
+
+    val isPinConfigured: Flow<Boolean> = pinHash.map { it != null }
+
+    suspend fun setPinHash(hash: String?) {
+        context.dataStore.edit { prefs ->
+            if (hash != null) {
+                prefs[Keys.PIN_HASH] = hash
+            } else {
+                prefs.remove(Keys.PIN_HASH)
+            }
+        }
+    }
+
+    suspend fun getPinHashSync(): String? {
+        return context.dataStore.data.first()[Keys.PIN_HASH]
     }
 }

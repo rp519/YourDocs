@@ -16,6 +16,10 @@ val Teal80 = Color(0xFFB2DFDB)
 val Teal90 = Color(0xFFE0F2F1)
 val Teal95 = Color(0xFFF0FAF9)
 
+// Warm-tinted versions for light mode containers (no blue cast)
+val WarmTeal90 = Color(0xFFF0EDEA)           // Warm light container
+val WarmTeal95 = Color(0xFFF7F5F2)           // Warm very-light container
+
 // Warm Neutrals — cream / ivory base
 val Cream = Color(0xFFFAF8F5)             // Main background (warm off-white)
 val Ivory = Color(0xFFFFFFF0)             // Badge backgrounds

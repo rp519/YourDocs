@@ -106,6 +106,9 @@ dependencies {
     // Image loading
     implementation(libs.coil.compose)
 
+    // Billing
+    implementation(libs.google.billing)
+
     // Testing
     testImplementation(libs.junit)
     testImplementation(libs.androidx.test.core)

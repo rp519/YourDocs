@@ -1,5 +1,6 @@
 package com.yourdocs.ui.home
 
+import android.app.Activity
 import android.widget.Toast
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
@@ -28,6 +29,7 @@ import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Warning
@@ -36,8 +38,11 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -52,6 +57,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -63,10 +69,17 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.yourdocs.data.billing.BillingEvent
 import com.yourdocs.domain.model.Folder
+import com.yourdocs.domain.model.LockMethod
 import com.yourdocs.ui.components.FolderColorPicker
 import com.yourdocs.ui.components.GradientTopBar
+import com.yourdocs.ui.components.LockMethodPickerDialog
+import com.yourdocs.ui.components.PinEntryDialog
+import com.yourdocs.ui.components.SetupPinDialog
+import com.yourdocs.ui.components.UpgradeBottomSheet
 import com.yourdocs.ui.theme.IvoryWhite
+import kotlinx.coroutines.launch
 import java.time.Duration
 import java.time.Instant
 import java.time.ZoneId
@@ -77,61 +90,143 @@ import java.time.format.DateTimeFormatter
 fun HomeScreen(
     onFolderClick: (String) -> Unit,
     onSettingsClick: () -> Unit,
+    onTermsOfServiceClick: () -> Unit = {},
     viewModel: HomeViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val showCreateDialog by viewModel.showCreateDialog.collectAsState()
     val showRenameDialog by viewModel.showRenameDialog.collectAsState()
     val showDeleteDialog by viewModel.showDeleteDialog.collectAsState()
+    val isPremium by viewModel.isPremium.collectAsState()
+    val productDetails by viewModel.billingManager.productDetails.collectAsState()
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
 
-    // Handle events (navigation + biometric)
+    // Auth state
+    var pendingAuthAction by remember { mutableStateOf<PendingAuthAction?>(null) }
+    var showPinDialog by remember { mutableStateOf(false) }
+    var pinDialogTitle by remember { mutableStateOf("Enter PIN") }
+    var pinError by remember { mutableStateOf<String?>(null) }
+    var showLockMethodPicker by remember { mutableStateOf<String?>(null) } // folderId
+    var showSetupPin by remember { mutableStateOf<Pair<String, LockMethod>?>(null) } // folderId, method
+
+    // Upgrade sheet state
+    var showUpgradeSheet by remember { mutableStateOf(false) }
+    var upgradeTriggerFeature by remember { mutableStateOf<String?>(null) }
+
+    // Check biometric availability
+    val biometricAvailable = remember {
+        val bm = BiometricManager.from(context)
+        bm.canAuthenticate(
+            BiometricManager.Authenticators.BIOMETRIC_STRONG or
+                    BiometricManager.Authenticators.BIOMETRIC_WEAK
+        ) == BiometricManager.BIOMETRIC_SUCCESS
+    }
+
+    fun launchBiometric(action: PendingAuthAction, title: String, subtitle: String, allowPinFallback: Boolean) {
+        val activity = context as? FragmentActivity ?: return
+        val promptBuilder = BiometricPrompt.PromptInfo.Builder()
+            .setTitle(title)
+            .setSubtitle(subtitle)
+
+        if (allowPinFallback) {
+            promptBuilder.setNegativeButtonText("Use PIN")
+        } else {
+            promptBuilder.setNegativeButtonText("Cancel")
+        }
+
+        val promptInfo = promptBuilder.build()
+        val biometricPrompt = BiometricPrompt(
+            activity,
+            ContextCompat.getMainExecutor(context),
+            object : BiometricPrompt.AuthenticationCallback() {
+                override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                    viewModel.onAuthSuccess(action)
+                }
+                override fun onAuthenticationFailed() {
+                    Toast.makeText(context, "Authentication failed", Toast.LENGTH_SHORT).show()
+                }
+                override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                    if (errorCode == BiometricPrompt.ERROR_NEGATIVE_BUTTON && allowPinFallback) {
+                        // User chose "Use PIN" — show PIN dialog
+                        pendingAuthAction = action
+                        pinError = null
+                        showPinDialog = true
+                    } else if (errorCode != BiometricPrompt.ERROR_USER_CANCELED &&
+                        errorCode != BiometricPrompt.ERROR_NEGATIVE_BUTTON) {
+                        Toast.makeText(context, errString.toString(), Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        )
+        biometricPrompt.authenticate(promptInfo)
+    }
+
+    // Handle events
     LaunchedEffect(Unit) {
         viewModel.events.collect { event ->
             when (event) {
                 is HomeEvent.NavigateToFolder -> {
                     onFolderClick(event.folderId)
                 }
-                is HomeEvent.RequestBiometric -> {
-                    val activity = context as? FragmentActivity
-                    if (activity != null) {
-                        val biometricManager = BiometricManager.from(context)
-                        val canAuthenticate = biometricManager.canAuthenticate(
-                            BiometricManager.Authenticators.BIOMETRIC_STRONG or
-                                    BiometricManager.Authenticators.BIOMETRIC_WEAK
-                        )
-                        if (canAuthenticate == BiometricManager.BIOMETRIC_SUCCESS) {
-                            val promptInfo = BiometricPrompt.PromptInfo.Builder()
-                                .setTitle("Unlock Folder")
-                                .setSubtitle("Authenticate to access this locked folder")
-                                .setNegativeButtonText("Cancel")
-                                .build()
-
-                            val biometricPrompt = BiometricPrompt(
-                                activity,
-                                ContextCompat.getMainExecutor(context),
-                                object : BiometricPrompt.AuthenticationCallback() {
-                                    override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
-                                        viewModel.onBiometricSuccess(event.folderId)
-                                    }
-                                    override fun onAuthenticationFailed() {
-                                        Toast.makeText(context, "Authentication failed", Toast.LENGTH_SHORT).show()
-                                    }
-                                    override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
-                                        if (errorCode != BiometricPrompt.ERROR_USER_CANCELED &&
-                                            errorCode != BiometricPrompt.ERROR_NEGATIVE_BUTTON) {
-                                            Toast.makeText(context, errString.toString(), Toast.LENGTH_SHORT).show()
-                                        }
-                                    }
-                                }
-                            )
-                            biometricPrompt.authenticate(promptInfo)
-                        } else {
-                            // Biometric not available — open anyway
-                            viewModel.onBiometricSuccess(event.folderId)
+                is HomeEvent.RequestAuthentication -> {
+                    when (event.lockMethod) {
+                        LockMethod.BIOMETRIC -> {
+                            if (biometricAvailable) {
+                                launchBiometric(event.action, event.title, event.subtitle, allowPinFallback = false)
+                            } else {
+                                // Biometric not available, let through
+                                viewModel.onAuthSuccess(event.action)
+                            }
+                        }
+                        LockMethod.PIN -> {
+                            pendingAuthAction = event.action
+                            pinDialogTitle = event.title
+                            pinError = null
+                            showPinDialog = true
+                        }
+                        LockMethod.BOTH -> {
+                            if (biometricAvailable) {
+                                launchBiometric(event.action, event.title, event.subtitle, allowPinFallback = true)
+                            } else {
+                                // Fallback to PIN only
+                                pendingAuthAction = event.action
+                                pinDialogTitle = event.title
+                                pinError = null
+                                showPinDialog = true
+                            }
                         }
                     }
                 }
+                is HomeEvent.ShowLockMethodPicker -> {
+                    showLockMethodPicker = event.folderId
+                }
+                is HomeEvent.ShowSetupPin -> {
+                    showSetupPin = Pair(event.folderId, event.method)
+                }
+                is HomeEvent.ShowToast -> {
+                    Toast.makeText(context, event.message, Toast.LENGTH_SHORT).show()
+                }
+                is HomeEvent.ShowUpgradeSheet -> {
+                    upgradeTriggerFeature = event.triggerFeature
+                    showUpgradeSheet = true
+                }
+            }
+        }
+    }
+
+    // Handle billing events
+    LaunchedEffect(Unit) {
+        viewModel.billingEvents.collect { event ->
+            when (event) {
+                is BillingEvent.PurchaseSuccess -> {
+                    showUpgradeSheet = false
+                    Toast.makeText(context, "Welcome to YourDocs Pro!", Toast.LENGTH_LONG).show()
+                }
+                is BillingEvent.PurchaseError -> {
+                    Toast.makeText(context, event.message, Toast.LENGTH_SHORT).show()
+                }
+                is BillingEvent.PurchaseCancelled -> { /* No action needed */ }
             }
         }
     }
@@ -183,7 +278,7 @@ fun HomeScreen(
                         onRenameClick = { viewModel.showRenameDialog(it) },
                         onDeleteClick = { viewModel.showDeleteDialog(it) },
                         onPinClick = { viewModel.togglePinned(it.id) },
-                        onLockClick = { viewModel.toggleLocked(it.id) }
+                        onLockClick = { viewModel.toggleLocked(it) }
                     )
                 }
 
@@ -201,9 +296,10 @@ fun HomeScreen(
     if (showCreateDialog) {
         CreateFolderDialog(
             onDismiss = { viewModel.hideCreateDialog() },
-            onConfirm = { name, colorHex, emoji ->
-                viewModel.createFolder(name, colorHex, emoji)
-            }
+            onConfirm = { name, colorHex, description ->
+                viewModel.createFolder(name, colorHex, description = description)
+            },
+            isPremium = isPremium
         )
     }
 
@@ -211,7 +307,7 @@ fun HomeScreen(
         RenameFolderDialog(
             folder = folder,
             onDismiss = { viewModel.hideRenameDialog() },
-            onConfirm = { name -> viewModel.renameFolder(folder.id, name) }
+            onConfirm = { name, description -> viewModel.renameFolder(folder.id, name, description) }
         )
     }
 
@@ -220,6 +316,69 @@ fun HomeScreen(
             folder = folder,
             onDismiss = { viewModel.hideDeleteDialog() },
             onConfirm = { viewModel.deleteFolder(folder.id) }
+        )
+    }
+
+    // PIN entry dialog
+    if (showPinDialog) {
+        PinEntryDialog(
+            title = pinDialogTitle,
+            errorMessage = pinError,
+            onDismiss = {
+                showPinDialog = false
+                pendingAuthAction = null
+                pinError = null
+            },
+            onConfirm = { pin ->
+                coroutineScope.launch {
+                    val valid = viewModel.verifyPin(pin)
+                    if (valid) {
+                        showPinDialog = false
+                        pinError = null
+                        pendingAuthAction?.let { viewModel.onAuthSuccess(it) }
+                        pendingAuthAction = null
+                    } else {
+                        pinError = "Incorrect PIN"
+                    }
+                }
+            }
+        )
+    }
+
+    // Lock method picker dialog
+    showLockMethodPicker?.let { folderId ->
+        LockMethodPickerDialog(
+            biometricAvailable = biometricAvailable,
+            onDismiss = { showLockMethodPicker = null },
+            onConfirm = { method ->
+                showLockMethodPicker = null
+                viewModel.onLockMethodChosen(folderId, method)
+            }
+        )
+    }
+
+    // Setup PIN dialog (when locking with PIN for the first time)
+    showSetupPin?.let { (folderId, method) ->
+        SetupPinDialog(
+            onDismiss = { showSetupPin = null },
+            onConfirm = { pin ->
+                showSetupPin = null
+                viewModel.onPinSetupComplete(folderId, method, pin)
+            }
+        )
+    }
+
+    // Upgrade bottom sheet
+    if (showUpgradeSheet) {
+        UpgradeBottomSheet(
+            onDismiss = { showUpgradeSheet = false },
+            onUpgradeClick = {
+                val activity = context as? Activity ?: return@UpgradeBottomSheet
+                viewModel.billingManager.launchPurchaseFlow(activity)
+            },
+            price = productDetails?.oneTimePurchaseOfferDetails?.formattedPrice,
+            triggerFeature = upgradeTriggerFeature,
+            onTermsClick = onTermsOfServiceClick
         )
     }
 }
@@ -332,6 +491,8 @@ fun FolderItem(
         catch (_: Exception) { MaterialTheme.colorScheme.primary }
     } ?: MaterialTheme.colorScheme.primary
 
+    var showMenu by remember { mutableStateOf(false) }
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
@@ -363,7 +524,8 @@ fun FolderItem(
                         text = folder.name,
                         style = MaterialTheme.typography.titleMedium,
                         maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
                     )
                     if (folder.isLocked && !folder.emoji.isNullOrEmpty()) {
                         Spacer(modifier = Modifier.width(6.dp))
@@ -374,6 +536,27 @@ fun FolderItem(
                             tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
+                    if (folder.isPinned) {
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Icon(
+                            imageVector = Icons.Default.PushPin,
+                            contentDescription = "Pinned",
+                            modifier = Modifier.size(16.dp),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+
+                // Description
+                if (!folder.description.isNullOrEmpty()) {
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = folder.description,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
 
                 Spacer(modifier = Modifier.height(4.dp))
@@ -389,10 +572,9 @@ fun FolderItem(
                 ) {
                     Text(
                         text = buildString {
-                            append("${folder.documentCount} ${if (folder.documentCount == 1) "document" else "documents"}")
+                            append("${folder.documentCount} ${if (folder.documentCount == 1) "doc" else "docs"}")
                             append(" \u00b7 ")
                             append(formatRelativeDate(folder.updatedAt))
-                            if (folder.isPinned) append(" \u00b7 Pinned")
                         },
                         style = MaterialTheme.typography.bodySmall,
                         color = Color.Black.copy(alpha = 0.87f)
@@ -400,32 +582,77 @@ fun FolderItem(
                 }
             }
 
-            // Action buttons
-            IconButton(onClick = onLockClick) {
-                Icon(
-                    imageVector = if (folder.isLocked) Icons.Default.Lock else Icons.Default.LockOpen,
-                    contentDescription = if (folder.isLocked) "Unlock" else "Lock",
-                    tint = if (folder.isLocked) MaterialTheme.colorScheme.primary
-                    else MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            IconButton(onClick = onPinClick) {
-                Icon(
-                    Icons.Default.PushPin,
-                    contentDescription = if (folder.isPinned) "Unpin" else "Pin",
-                    tint = if (folder.isPinned) MaterialTheme.colorScheme.primary
-                    else MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            IconButton(onClick = onRenameClick) {
-                Icon(Icons.Default.Edit, contentDescription = "Rename")
-            }
-            IconButton(onClick = onDeleteClick) {
-                Icon(
-                    Icons.Default.Delete,
-                    contentDescription = "Delete",
-                    tint = MaterialTheme.colorScheme.error
-                )
+            // Three-dot overflow menu
+            Box {
+                IconButton(onClick = { showMenu = true }) {
+                    Icon(Icons.Default.MoreVert, contentDescription = "More options")
+                }
+
+                DropdownMenu(
+                    expanded = showMenu,
+                    onDismissRequest = { showMenu = false }
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("Rename") },
+                        onClick = {
+                            onRenameClick()
+                            showMenu = false
+                        },
+                        leadingIcon = {
+                            Icon(Icons.Default.Edit, contentDescription = null)
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                "Delete",
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        },
+                        onClick = {
+                            onDeleteClick()
+                            showMenu = false
+                        },
+                        leadingIcon = {
+                            Icon(
+                                Icons.Default.Delete,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    )
+                    HorizontalDivider()
+                    DropdownMenuItem(
+                        text = { Text(if (folder.isPinned) "Unpin" else "Pin") },
+                        onClick = {
+                            onPinClick()
+                            showMenu = false
+                        },
+                        leadingIcon = {
+                            Icon(
+                                Icons.Default.PushPin,
+                                contentDescription = null,
+                                tint = if (folder.isPinned) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text(if (folder.isLocked) "Unlock" else "Lock") },
+                        onClick = {
+                            onLockClick()
+                            showMenu = false
+                        },
+                        leadingIcon = {
+                            Icon(
+                                if (folder.isLocked) Icons.Default.Lock else Icons.Default.LockOpen,
+                                contentDescription = null,
+                                tint = if (folder.isLocked) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    )
+                }
             }
         }
     }
@@ -434,11 +661,12 @@ fun FolderItem(
 @Composable
 fun CreateFolderDialog(
     onDismiss: () -> Unit,
-    onConfirm: (name: String, colorHex: String?, emoji: String?) -> Unit
+    onConfirm: (name: String, colorHex: String?, description: String?) -> Unit,
+    isPremium: Boolean = true
 ) {
     var folderName by remember { mutableStateOf("") }
     var selectedColor by remember { mutableStateOf<String?>(null) }
-    var emoji by remember { mutableStateOf("") }
+    var description by remember { mutableStateOf("") }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -452,30 +680,53 @@ fun CreateFolderDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
-                Spacer(modifier = Modifier.height(16.dp))
-                Text(
-                    text = "Color",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                FolderColorPicker(
-                    selectedColor = selectedColor,
-                    onColorSelected = { selectedColor = it }
-                )
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(12.dp))
                 OutlinedTextField(
-                    value = emoji,
-                    onValueChange = { if (it.length <= 2) emoji = it },
-                    label = { Text("Emoji (optional)") },
-                    singleLine = true,
-                    modifier = Modifier.width(120.dp)
+                    value = description,
+                    onValueChange = { description = it },
+                    label = { Text("Description (optional)") },
+                    maxLines = 3,
+                    modifier = Modifier.fillMaxWidth()
                 )
+                Spacer(modifier = Modifier.height(16.dp))
+                if (isPremium) {
+                    Text(
+                        text = "Color",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    FolderColorPicker(
+                        selectedColor = selectedColor,
+                        onColorSelected = { selectedColor = it }
+                    )
+                } else {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Default.Lock,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "Custom colors available with Pro",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
             }
         },
         confirmButton = {
             TextButton(
-                onClick = { onConfirm(folderName, selectedColor, emoji.ifEmpty { null }) },
+                onClick = {
+                    onConfirm(
+                        folderName,
+                        if (isPremium) selectedColor else null,
+                        description.ifBlank { null }
+                    )
+                },
                 enabled = folderName.isNotBlank()
             ) {
                 Text("Create")
@@ -493,27 +744,42 @@ fun CreateFolderDialog(
 fun RenameFolderDialog(
     folder: Folder,
     onDismiss: () -> Unit,
-    onConfirm: (String) -> Unit
+    onConfirm: (String, String?) -> Unit
 ) {
     var folderName by remember { mutableStateOf(folder.name) }
+    var description by remember { mutableStateOf(folder.description ?: "") }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Rename Folder") },
         text = {
-            OutlinedTextField(
-                value = folderName,
-                onValueChange = { folderName = it },
-                label = { Text("Folder Name") },
-                singleLine = true
-            )
+            Column {
+                OutlinedTextField(
+                    value = folderName,
+                    onValueChange = { folderName = it },
+                    label = { Text("Folder Name") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                OutlinedTextField(
+                    value = description,
+                    onValueChange = { description = it },
+                    label = { Text("Description (optional)") },
+                    maxLines = 3,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
         },
         confirmButton = {
             TextButton(
-                onClick = { onConfirm(folderName) },
-                enabled = folderName.isNotBlank() && folderName != folder.name
+                onClick = {
+                    onConfirm(folderName, description.ifBlank { null })
+                },
+                enabled = folderName.isNotBlank() &&
+                        (folderName != folder.name || description.ifBlank { null } != folder.description)
             ) {
-                Text("Rename")
+                Text("Save")
             }
         },
         dismissButton = {

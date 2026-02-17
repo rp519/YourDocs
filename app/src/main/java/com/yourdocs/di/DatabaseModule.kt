@@ -27,7 +27,7 @@ object DatabaseModule {
             YourDocsDatabase::class.java,
             YourDocsDatabase.DATABASE_NAME
         )
-            .addMigrations(YourDocsDatabase.MIGRATION_1_2)
+            .addMigrations(YourDocsDatabase.MIGRATION_1_2, YourDocsDatabase.MIGRATION_2_3)
             .build()
     }
 

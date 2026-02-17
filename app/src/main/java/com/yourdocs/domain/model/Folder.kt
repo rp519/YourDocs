@@ -14,6 +14,8 @@ data class Folder(
     val documentCount: Int,
     val colorHex: String? = null,
     val emoji: String? = null,
+    val description: String? = null,
+    val lockMethod: LockMethod? = null,
     val createdAt: Instant,
     val updatedAt: Instant
 ) {

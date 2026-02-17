@@ -71,6 +71,12 @@ interface DocumentDao {
     suspend fun updateDocumentName(documentId: String, newName: String, updatedAt: Long)
 
     /**
+     * Get total document count across all folders.
+     */
+    @Query("SELECT COUNT(*) FROM documents")
+    suspend fun getTotalDocumentCount(): Int
+
+    /**
      * Get all documents (for export/migration).
      */
     @Query("SELECT * FROM documents")

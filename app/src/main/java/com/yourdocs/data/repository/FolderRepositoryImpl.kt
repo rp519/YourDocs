@@ -35,7 +35,7 @@ class FolderRepositoryImpl @Inject constructor(
         return entity.toDomain(documentCount = 0) // Will be updated by DAO query if needed
     }
 
-    override suspend fun createFolder(name: String, colorHex: String?, emoji: String?): Result<Folder> {
+    override suspend fun createFolder(name: String, colorHex: String?, emoji: String?, description: String?): Result<Folder> {
         return try {
             // Check if name already exists
             if (folderDao.folderNameExists(name)) {
@@ -51,6 +51,7 @@ class FolderRepositoryImpl @Inject constructor(
                 documentCount = 0,
                 colorHex = colorHex,
                 emoji = emoji,
+                description = description?.trim()?.ifEmpty { null },
                 createdAt = now,
                 updatedAt = now
             )
@@ -105,13 +106,13 @@ class FolderRepositoryImpl @Inject constructor(
         }
     }
 
-    override suspend fun setLocked(folderId: String, isLocked: Boolean): Result<Unit> {
+    override suspend fun setLocked(folderId: String, isLocked: Boolean, lockMethod: String?): Result<Unit> {
         return try {
             val folder = folderDao.getFolderById(folderId)
                 ?: return Result.failure(IllegalArgumentException("Folder not found"))
 
             val now = Instant.now().toEpochMilli()
-            folderDao.updateLockedStatus(folderId, isLocked, now)
+            folderDao.updateLockedStatus(folderId, isLocked, if (isLocked) lockMethod else null, now)
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
@@ -122,6 +123,16 @@ class FolderRepositoryImpl @Inject constructor(
         return try {
             val now = Instant.now().toEpochMilli()
             folderDao.updateFolderAppearance(folderId, colorHex, emoji, now)
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun updateDescription(folderId: String, description: String?): Result<Unit> {
+        return try {
+            val now = Instant.now().toEpochMilli()
+            folderDao.updateDescription(folderId, description?.trim()?.ifEmpty { null }, now)
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)

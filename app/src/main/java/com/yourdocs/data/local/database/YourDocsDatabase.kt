@@ -17,7 +17,7 @@ import com.yourdocs.data.local.entity.FolderEntity
         FolderEntity::class,
         DocumentEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = true
 )
 abstract class YourDocsDatabase : RoomDatabase() {
@@ -31,6 +31,14 @@ abstract class YourDocsDatabase : RoomDatabase() {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE folders ADD COLUMN color_hex TEXT DEFAULT NULL")
                 db.execSQL("ALTER TABLE folders ADD COLUMN emoji TEXT DEFAULT NULL")
+            }
+        }
+
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE folders ADD COLUMN description TEXT DEFAULT NULL")
+                db.execSQL("ALTER TABLE folders ADD COLUMN lock_method TEXT DEFAULT NULL")
+                db.execSQL("UPDATE folders SET lock_method = 'BIOMETRIC' WHERE is_locked = 1")
             }
         }
     }

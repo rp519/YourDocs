@@ -4,8 +4,11 @@ import android.net.Uri
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.yourdocs.data.billing.BillingEvent
+import com.yourdocs.data.billing.BillingManager
 import com.yourdocs.domain.model.Document
 import com.yourdocs.domain.model.DocumentSource
+import com.yourdocs.domain.model.FreeLimitReachedException
 import com.yourdocs.domain.repository.FolderRepository
 import com.yourdocs.domain.usecase.DeleteDocumentUseCase
 import com.yourdocs.domain.usecase.GetDocumentsInFolderUseCase
@@ -31,7 +34,8 @@ class FolderDetailViewModel @Inject constructor(
     private val getDocumentsInFolderUseCase: GetDocumentsInFolderUseCase,
     private val importDocumentUseCase: ImportDocumentUseCase,
     private val deleteDocumentUseCase: DeleteDocumentUseCase,
-    private val renameDocumentUseCase: RenameDocumentUseCase
+    private val renameDocumentUseCase: RenameDocumentUseCase,
+    val billingManager: BillingManager
 ) : ViewModel() {
 
     val folderId: String = savedStateHandle.get<String>("folderId")!!
@@ -45,6 +49,9 @@ class FolderDetailViewModel @Inject constructor(
     private val _isImporting = MutableStateFlow(false)
     val isImporting: StateFlow<Boolean> = _isImporting.asStateFlow()
 
+    private val _importProgress = MutableStateFlow("")
+    val importProgress: StateFlow<String> = _importProgress.asStateFlow()
+
     private val _showRenameDialog = MutableStateFlow<Document?>(null)
     val showRenameDialog: StateFlow<Document?> = _showRenameDialog.asStateFlow()
 
@@ -53,6 +60,8 @@ class FolderDetailViewModel @Inject constructor(
 
     private val _events = MutableSharedFlow<FolderDetailEvent>()
     val events: SharedFlow<FolderDetailEvent> = _events.asSharedFlow()
+
+    val billingEvents: SharedFlow<BillingEvent> = billingManager.billingEvents
 
     init {
         loadFolderName()
@@ -99,15 +108,55 @@ class FolderDetailViewModel @Inject constructor(
     fun onFileSelected(uri: Uri, source: DocumentSource) {
         viewModelScope.launch {
             _isImporting.value = true
+            _importProgress.value = "Importing document..."
             importDocumentUseCase(folderId, uri, source)
                 .onFailure { error ->
-                    _events.emit(
-                        FolderDetailEvent.ShowError(
-                            error.message ?: "Failed to import document"
+                    if (error is FreeLimitReachedException) {
+                        _events.emit(FolderDetailEvent.ShowUpgradeSheet("Unlimited Documents"))
+                    } else {
+                        _events.emit(
+                            FolderDetailEvent.ShowError(
+                                error.message ?: "Failed to import document"
+                            )
                         )
-                    )
+                    }
                 }
             _isImporting.value = false
+        }
+    }
+
+    fun onMultipleFilesSelected(uris: List<Uri>, source: DocumentSource) {
+        if (uris.isEmpty()) return
+        if (uris.size == 1) {
+            onFileSelected(uris.first(), source)
+            return
+        }
+        viewModelScope.launch {
+            _isImporting.value = true
+            var failCount = 0
+            var limitReached = false
+            uris.forEachIndexed { index, uri ->
+                if (limitReached) {
+                    failCount++
+                    return@forEachIndexed
+                }
+                _importProgress.value = "Importing ${index + 1} of ${uris.size}..."
+                importDocumentUseCase(folderId, uri, source)
+                    .onFailure { error ->
+                        if (error is FreeLimitReachedException) {
+                            limitReached = true
+                        }
+                        failCount++
+                    }
+            }
+            _isImporting.value = false
+            if (limitReached) {
+                _events.emit(FolderDetailEvent.ShowUpgradeSheet("Unlimited Documents"))
+            } else if (failCount > 0) {
+                _events.emit(
+                    FolderDetailEvent.ShowError("Failed to import $failCount of ${uris.size} documents")
+                )
+            }
         }
     }
 
@@ -125,11 +174,15 @@ class FolderDetailViewModel @Inject constructor(
                 overrideName = displayName,
                 pageCount = pageCount
             ).onFailure { error ->
-                _events.emit(
-                    FolderDetailEvent.ShowError(
-                        error.message ?: "Failed to save scanned document"
+                if (error is FreeLimitReachedException) {
+                    _events.emit(FolderDetailEvent.ShowUpgradeSheet("Unlimited Documents"))
+                } else {
+                    _events.emit(
+                        FolderDetailEvent.ShowError(
+                            error.message ?: "Failed to save scanned document"
+                        )
                     )
-                )
+                }
             }
             _isImporting.value = false
         }
@@ -202,4 +255,5 @@ sealed interface FolderDetailEvent {
     data object LaunchGalleryPicker : FolderDetailEvent
     data class NavigateToViewer(val documentId: String) : FolderDetailEvent
     data class ShowError(val message: String) : FolderDetailEvent
+    data class ShowUpgradeSheet(val triggerFeature: String) : FolderDetailEvent
 }

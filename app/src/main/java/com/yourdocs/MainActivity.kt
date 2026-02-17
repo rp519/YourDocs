@@ -6,6 +6,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.fragment.app.FragmentActivity
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import com.yourdocs.data.billing.BillingManager
 import com.yourdocs.data.preferences.UserPreferencesRepository
 import com.yourdocs.ui.navigation.YourDocsNavigation
 import com.yourdocs.ui.theme.ThemeMode
@@ -19,8 +20,12 @@ class MainActivity : FragmentActivity() {
     @Inject
     lateinit var userPreferencesRepository: UserPreferencesRepository
 
+    @Inject
+    lateinit var billingManager: BillingManager
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        billingManager.startConnection()
         enableEdgeToEdge()
         setContent {
             val themeMode by userPreferencesRepository.themeMode
@@ -30,5 +35,10 @@ class MainActivity : FragmentActivity() {
                 YourDocsNavigation()
             }
         }
+    }
+
+    override fun onDestroy() {
+        billingManager.endConnection()
+        super.onDestroy()
     }
 }

@@ -84,10 +84,10 @@ interface FolderDao {
     suspend fun updatePinnedStatus(folderId: String, isPinned: Boolean, updatedAt: Long)
 
     /**
-     * Update folder's locked status.
+     * Update folder's locked status and lock method.
      */
-    @Query("UPDATE folders SET is_locked = :isLocked, updated_at = :updatedAt WHERE id = :folderId")
-    suspend fun updateLockedStatus(folderId: String, isLocked: Boolean, updatedAt: Long)
+    @Query("UPDATE folders SET is_locked = :isLocked, lock_method = :lockMethod, updated_at = :updatedAt WHERE id = :folderId")
+    suspend fun updateLockedStatus(folderId: String, isLocked: Boolean, lockMethod: String?, updatedAt: Long)
 
     /**
      * Update folder name.
@@ -100,4 +100,16 @@ interface FolderDao {
      */
     @Query("UPDATE folders SET color_hex = :colorHex, emoji = :emoji, updated_at = :updatedAt WHERE id = :folderId")
     suspend fun updateFolderAppearance(folderId: String, colorHex: String?, emoji: String?, updatedAt: Long)
+
+    /**
+     * Get total folder count across all folders.
+     */
+    @Query("SELECT COUNT(*) FROM folders")
+    suspend fun getTotalFolderCount(): Int
+
+    /**
+     * Update folder description.
+     */
+    @Query("UPDATE folders SET description = :description, updated_at = :updatedAt WHERE id = :folderId")
+    suspend fun updateDescription(folderId: String, description: String?, updatedAt: Long)
 }

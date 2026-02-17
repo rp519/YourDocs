@@ -29,7 +29,7 @@ interface FolderRepository {
      * Create a new folder.
      * Returns the created folder or null if name already exists.
      */
-    suspend fun createFolder(name: String, colorHex: String? = null, emoji: String? = null): Result<Folder>
+    suspend fun createFolder(name: String, colorHex: String? = null, emoji: String? = null, description: String? = null): Result<Folder>
 
     /**
      * Rename a folder.
@@ -48,12 +48,17 @@ interface FolderRepository {
     suspend fun togglePinned(folderId: String): Result<Unit>
 
     /**
-     * Set folder locked status.
+     * Set folder locked status with optional lock method.
      */
-    suspend fun setLocked(folderId: String, isLocked: Boolean): Result<Unit>
+    suspend fun setLocked(folderId: String, isLocked: Boolean, lockMethod: String? = null): Result<Unit>
 
     /**
      * Update folder appearance (color and emoji).
      */
     suspend fun updateAppearance(folderId: String, colorHex: String?, emoji: String?): Result<Unit>
+
+    /**
+     * Update folder description.
+     */
+    suspend fun updateDescription(folderId: String, description: String?): Result<Unit>
 }

@@ -20,6 +20,7 @@ androidx-test-core = "1.6.1"
 kotlinx-coroutines-test = "1.9.0"
 truth = "1.4.4"
 mockito-kotlin = "5.4.0"
+billing = "7.1.1"
 
 [libraries]
 # Compose BOM
@@ -70,6 +71,9 @@ kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-
 
 # Image loading
 coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil" }
+
+# Billing
+google-billing = { group = "com.android.billingclient", name = "billing-ktx", version.ref = "billing" }
 
 # Testing
 junit = { group = "junit", name = "junit", version.ref = "junit" }

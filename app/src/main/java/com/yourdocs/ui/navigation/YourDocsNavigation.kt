@@ -13,6 +13,8 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.yourdocs.ui.folder.FolderDetailScreen
 import com.yourdocs.ui.home.HomeScreen
+import com.yourdocs.ui.settings.LegalScreen
+import com.yourdocs.ui.settings.LegalType
 import com.yourdocs.ui.settings.SettingsScreen
 import com.yourdocs.ui.viewer.DocumentViewerScreen
 
@@ -22,6 +24,8 @@ sealed class Screen(val route: String) {
         fun createRoute(folderId: String) = "folder/$folderId"
     }
     data object Settings : Screen("settings")
+    data object PrivacyPolicy : Screen("legal/privacy")
+    data object TermsOfService : Screen("legal/terms")
     data object DocumentViewer : Screen("viewer/{documentId}") {
         fun createRoute(documentId: String) = "viewer/$documentId"
     }
@@ -46,6 +50,9 @@ fun YourDocsNavigation(
                 },
                 onSettingsClick = {
                     navController.navigate(Screen.Settings.route)
+                },
+                onTermsOfServiceClick = {
+                    navController.navigate(Screen.TermsOfService.route)
                 }
             )
         }
@@ -60,12 +67,31 @@ fun YourDocsNavigation(
                 onNavigateBack = { navController.popBackStack() },
                 onDocumentClick = { documentId ->
                     navController.navigate(Screen.DocumentViewer.createRoute(documentId))
+                },
+                onTermsOfServiceClick = {
+                    navController.navigate(Screen.TermsOfService.route)
                 }
             )
         }
 
         composable(Screen.Settings.route) {
             SettingsScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onPrivacyPolicyClick = { navController.navigate(Screen.PrivacyPolicy.route) },
+                onTermsOfServiceClick = { navController.navigate(Screen.TermsOfService.route) }
+            )
+        }
+
+        composable(Screen.PrivacyPolicy.route) {
+            LegalScreen(
+                legalType = LegalType.PRIVACY_POLICY,
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+
+        composable(Screen.TermsOfService.route) {
+            LegalScreen(
+                legalType = LegalType.TERMS_OF_SERVICE,
                 onNavigateBack = { navController.popBackStack() }
             )
         }

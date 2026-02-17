@@ -79,9 +79,11 @@ import coil.compose.AsyncImage
 import com.google.mlkit.vision.documentscanner.GmsDocumentScanning
 import com.google.mlkit.vision.documentscanner.GmsDocumentScannerOptions
 import com.google.mlkit.vision.documentscanner.GmsDocumentScanningResult
+import com.yourdocs.data.billing.BillingEvent
 import com.yourdocs.domain.model.Document
 import com.yourdocs.domain.model.DocumentSource
 import com.yourdocs.ui.components.GradientTopBar
+import com.yourdocs.ui.components.UpgradeBottomSheet
 import com.yourdocs.ui.theme.LocalYourDocsColors
 import java.io.File
 import java.time.ZoneId
@@ -91,30 +93,41 @@ import java.time.format.DateTimeFormatter
 fun FolderDetailScreen(
     onNavigateBack: () -> Unit,
     onDocumentClick: (String) -> Unit,
+    onTermsOfServiceClick: () -> Unit = {},
     viewModel: FolderDetailViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsState()
     val folderName by viewModel.folderName.collectAsState()
     val isImporting by viewModel.isImporting.collectAsState()
+    val importProgress by viewModel.importProgress.collectAsState()
     val showRenameDialog by viewModel.showRenameDialog.collectAsState()
     val showDeleteDialog by viewModel.showDeleteDialog.collectAsState()
+    val productDetails by viewModel.billingManager.productDetails.collectAsState()
 
     val snackbarHostState = remember { SnackbarHostState() }
     var showImportMenu by remember { mutableStateOf(false) }
 
-    // File picker launcher
+    // Upgrade sheet state
+    var showUpgradeSheet by remember { mutableStateOf(false) }
+    var upgradeTriggerFeature by remember { mutableStateOf<String?>(null) }
+
+    // File picker launcher (multi-select)
     val filePickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument()
-    ) { uri ->
-        uri?.let { viewModel.onFileSelected(it, DocumentSource.IMPORT) }
+        contract = ActivityResultContracts.OpenMultipleDocuments()
+    ) { uris ->
+        if (uris.isNotEmpty()) {
+            viewModel.onMultipleFilesSelected(uris, DocumentSource.IMPORT)
+        }
     }
 
-    // Gallery picker launcher
+    // Gallery picker launcher (multi-select)
     val galleryPickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.PickVisualMedia()
-    ) { uri ->
-        uri?.let { viewModel.onFileSelected(it, DocumentSource.GALLERY) }
+        contract = ActivityResultContracts.PickMultipleVisualMedia()
+    ) { uris ->
+        if (uris.isNotEmpty()) {
+            viewModel.onMultipleFilesSelected(uris, DocumentSource.GALLERY)
+        }
     }
 
     // Document scanner
@@ -162,6 +175,27 @@ fun FolderDetailScreen(
                 is FolderDetailEvent.ShowError -> {
                     snackbarHostState.showSnackbar(event.message)
                 }
+
+                is FolderDetailEvent.ShowUpgradeSheet -> {
+                    upgradeTriggerFeature = event.triggerFeature
+                    showUpgradeSheet = true
+                }
+            }
+        }
+    }
+
+    // Handle billing events
+    LaunchedEffect(Unit) {
+        viewModel.billingEvents.collect { event ->
+            when (event) {
+                is BillingEvent.PurchaseSuccess -> {
+                    showUpgradeSheet = false
+                    Toast.makeText(context, "Welcome to YourDocs Pro!", Toast.LENGTH_LONG).show()
+                }
+                is BillingEvent.PurchaseError -> {
+                    Toast.makeText(context, event.message, Toast.LENGTH_SHORT).show()
+                }
+                is BillingEvent.PurchaseCancelled -> { /* No action needed */ }
             }
         }
     }
@@ -311,7 +345,7 @@ fun FolderDetailScreen(
                                 horizontalArrangement = Arrangement.spacedBy(16.dp)
                             ) {
                                 CircularProgressIndicator(modifier = Modifier.size(24.dp))
-                                Text("Importing document...")
+                                Text(importProgress)
                             }
                         }
                     }
@@ -334,6 +368,20 @@ fun FolderDetailScreen(
             document = document,
             onDismiss = { viewModel.hideDeleteDialog() },
             onConfirm = { viewModel.deleteDocument(document.id) }
+        )
+    }
+
+    // Upgrade bottom sheet
+    if (showUpgradeSheet) {
+        UpgradeBottomSheet(
+            onDismiss = { showUpgradeSheet = false },
+            onUpgradeClick = {
+                val act = context as? Activity ?: return@UpgradeBottomSheet
+                viewModel.billingManager.launchPurchaseFlow(act)
+            },
+            price = productDetails?.oneTimePurchaseOfferDetails?.formattedPrice,
+            triggerFeature = upgradeTriggerFeature,
+            onTermsClick = onTermsOfServiceClick
         )
     }
 }

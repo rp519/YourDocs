@@ -4,14 +4,20 @@ import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.yourdocs.data.backup.BackupManager
+import com.yourdocs.data.billing.BillingEvent
+import com.yourdocs.data.billing.BillingManager
+import com.yourdocs.data.billing.PremiumRepository
 import com.yourdocs.data.preferences.SortOrder
 import com.yourdocs.data.preferences.UserPreferencesRepository
+import com.yourdocs.domain.usecase.SetupPinUseCase
 import com.yourdocs.ui.theme.ThemeMode
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.io.File
@@ -34,7 +40,10 @@ sealed interface RestoreState {
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val preferencesRepository: UserPreferencesRepository,
-    private val backupManager: BackupManager
+    private val backupManager: BackupManager,
+    private val setupPinUseCase: SetupPinUseCase,
+    premiumRepository: PremiumRepository,
+    val billingManager: BillingManager
 ) : ViewModel() {
 
     val themeMode: StateFlow<ThemeMode> = preferencesRepository.themeMode
@@ -45,6 +54,18 @@ class SettingsViewModel @Inject constructor(
 
     val sortOrder: StateFlow<SortOrder> = preferencesRepository.sortOrder
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), SortOrder.DATE_NEWEST)
+
+    val isPinConfigured: StateFlow<Boolean> = preferencesRepository.isPinConfigured
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
+    val isPremium: StateFlow<Boolean> = premiumRepository.isPremium
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
+    val productPrice: StateFlow<String?> = billingManager.productDetails
+        .map { it?.oneTimePurchaseOfferDetails?.formattedPrice }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    val billingEvents: SharedFlow<BillingEvent> = billingManager.billingEvents
 
     private val _backupState = MutableStateFlow<BackupState>(BackupState.Idle)
     val backupState: StateFlow<BackupState> = _backupState.asStateFlow()
@@ -67,6 +88,20 @@ class SettingsViewModel @Inject constructor(
     fun setSortOrder(order: SortOrder) {
         viewModelScope.launch {
             preferencesRepository.setSortOrder(order)
+        }
+    }
+
+    fun setupPin(pin: String, onResult: (Boolean) -> Unit) {
+        viewModelScope.launch {
+            setupPinUseCase(pin)
+                .onSuccess { onResult(true) }
+                .onFailure { onResult(false) }
+        }
+    }
+
+    fun removePin() {
+        viewModelScope.launch {
+            preferencesRepository.setPinHash(null)
         }
     }
 
@@ -96,6 +131,10 @@ class SettingsViewModel @Inject constructor(
                 _restoreState.value = RestoreState.Error(e.message ?: "Restore failed")
             }
         }
+    }
+
+    fun restorePurchases(onResult: (Boolean) -> Unit) {
+        billingManager.restorePurchases(onResult)
     }
 
     fun resetBackupState() {

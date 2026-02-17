@@ -1,6 +1,10 @@
 package com.yourdocs.ui.settings
 
+import android.app.Activity
+import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.net.Uri
+import android.os.Build
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -21,11 +25,17 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Feedback
 import androidx.compose.material.icons.filled.Fingerprint
+import androidx.compose.material.icons.filled.Gavel
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LightMode
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Pin
 import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.Sort
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -42,6 +52,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -56,13 +67,18 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.yourdocs.BuildConfig
+import com.yourdocs.data.billing.BillingEvent
 import com.yourdocs.data.preferences.SortOrder
 import com.yourdocs.ui.components.GradientTopBar
+import com.yourdocs.ui.components.SetupPinDialog
+import com.yourdocs.ui.components.UpgradeBottomSheet
 import com.yourdocs.ui.theme.ThemeMode
 
 @Composable
 fun SettingsScreen(
     onNavigateBack: () -> Unit,
+    onPrivacyPolicyClick: () -> Unit = {},
+    onTermsOfServiceClick: () -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
@@ -71,9 +87,18 @@ fun SettingsScreen(
     val sortOrder by viewModel.sortOrder.collectAsState()
     val backupState by viewModel.backupState.collectAsState()
     val restoreState by viewModel.restoreState.collectAsState()
+    val isPinConfigured by viewModel.isPinConfigured.collectAsState()
+    val isPremium by viewModel.isPremium.collectAsState()
+    val productPrice by viewModel.productPrice.collectAsState()
 
     var showRestoreConfirmDialog by remember { mutableStateOf(false) }
     var pendingRestoreUri by remember { mutableStateOf<android.net.Uri?>(null) }
+    var showSetupPinDialog by remember { mutableStateOf(false) }
+    var showRemovePinConfirmDialog by remember { mutableStateOf(false) }
+
+    // Upgrade sheet state
+    var showUpgradeSheet by remember { mutableStateOf(false) }
+    var upgradeTriggerFeature by remember { mutableStateOf<String?>(null) }
 
     val restorePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
@@ -81,6 +106,22 @@ fun SettingsScreen(
         uri?.let {
             pendingRestoreUri = it
             showRestoreConfirmDialog = true
+        }
+    }
+
+    // Handle billing events
+    LaunchedEffect(Unit) {
+        viewModel.billingEvents.collect { event ->
+            when (event) {
+                is BillingEvent.PurchaseSuccess -> {
+                    showUpgradeSheet = false
+                    Toast.makeText(context, "Welcome to YourDocs Pro!", Toast.LENGTH_LONG).show()
+                }
+                is BillingEvent.PurchaseError -> {
+                    Toast.makeText(context, event.message, Toast.LENGTH_SHORT).show()
+                }
+                is BillingEvent.PurchaseCancelled -> { /* No action needed */ }
+            }
         }
     }
 
@@ -148,6 +189,37 @@ fun SettingsScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            // Upgrade Section (free users only)
+            if (!isPremium) {
+                SettingsSection(title = "Upgrade") {
+                    SettingsRow(
+                        icon = Icons.Default.Star,
+                        title = "Upgrade to Pro",
+                        subtitle = if (productPrice != null) "One-time purchase for $productPrice"
+                        else "Unlock all features",
+                        onClick = {
+                            upgradeTriggerFeature = null
+                            showUpgradeSheet = true
+                        }
+                    )
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                    SettingsRow(
+                        icon = Icons.Default.Restore,
+                        title = "Restore Purchase",
+                        subtitle = "Restore a previous purchase on this device",
+                        onClick = {
+                            viewModel.restorePurchases { success ->
+                                if (success) {
+                                    Toast.makeText(context, "Purchase restored! Welcome back to Pro.", Toast.LENGTH_LONG).show()
+                                } else {
+                                    Toast.makeText(context, "No previous purchase found.", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        }
+                    )
+                }
+            }
+
             // Appearance Section
             SettingsSection(title = "Appearance") {
                 Text(
@@ -180,15 +252,70 @@ fun SettingsScreen(
 
             // Security Section
             SettingsSection(title = "Security") {
-                SettingsRow(
-                    icon = Icons.Default.Fingerprint,
-                    title = "Biometric Lock",
-                    subtitle = "Require fingerprint to open locked folders"
-                ) {
-                    Switch(
-                        checked = biometricEnabled,
-                        onCheckedChange = { viewModel.setBiometricEnabled(it) }
+                if (isPremium) {
+                    SettingsRow(
+                        icon = Icons.Default.Fingerprint,
+                        title = "Biometric Lock",
+                        subtitle = "Require fingerprint to open locked folders"
+                    ) {
+                        Switch(
+                            checked = biometricEnabled,
+                            onCheckedChange = { viewModel.setBiometricEnabled(it) }
+                        )
+                    }
+                } else {
+                    SettingsRow(
+                        icon = Icons.Default.Fingerprint,
+                        title = "Biometric Lock",
+                        subtitle = "Pro feature",
+                        onClick = {
+                            upgradeTriggerFeature = "Biometric Lock"
+                            showUpgradeSheet = true
+                        }
+                    ) {
+                        Icon(
+                            Icons.Default.Lock,
+                            contentDescription = "Pro",
+                            modifier = Modifier.size(20.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                if (isPremium) {
+                    SettingsRow(
+                        icon = Icons.Default.Pin,
+                        title = if (isPinConfigured) "Change PIN" else "Set Up PIN",
+                        subtitle = if (isPinConfigured) "Change your folder unlock PIN"
+                        else "Set a 4-6 digit PIN to lock folders",
+                        onClick = { showSetupPinDialog = true }
                     )
+                    if (isPinConfigured) {
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                        SettingsRow(
+                            icon = Icons.Default.Pin,
+                            title = "Remove PIN",
+                            subtitle = "Remove PIN protection from folders",
+                            onClick = { showRemovePinConfirmDialog = true }
+                        )
+                    }
+                } else {
+                    SettingsRow(
+                        icon = Icons.Default.Pin,
+                        title = "PIN Setup",
+                        subtitle = "Pro feature",
+                        onClick = {
+                            upgradeTriggerFeature = "PIN Lock"
+                            showUpgradeSheet = true
+                        }
+                    ) {
+                        Icon(
+                            Icons.Default.Lock,
+                            contentDescription = "Pro",
+                            modifier = Modifier.size(20.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
 
@@ -246,38 +373,76 @@ fun SettingsScreen(
                 val isBackingUp = backupState is BackupState.InProgress
                 val isRestoring = restoreState is RestoreState.InProgress
 
-                SettingsRow(
-                    icon = Icons.Default.Backup,
-                    title = "Create Backup",
-                    subtitle = "Export all folders and documents as a zip file",
-                    onClick = if (!isBackingUp && !isRestoring) {
-                        { viewModel.createBackup() }
-                    } else null
-                )
-
-                if (isBackingUp) {
-                    LinearProgressIndicator(
-                        progress = { (backupState as BackupState.InProgress).progress },
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+                if (isPremium) {
+                    SettingsRow(
+                        icon = Icons.Default.Backup,
+                        title = "Create Backup",
+                        subtitle = "Export all folders and documents as a zip file",
+                        onClick = if (!isBackingUp && !isRestoring) {
+                            { viewModel.createBackup() }
+                        } else null
                     )
-                }
 
-                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                    if (isBackingUp) {
+                        LinearProgressIndicator(
+                            progress = { (backupState as BackupState.InProgress).progress },
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+                        )
+                    }
 
-                SettingsRow(
-                    icon = Icons.Default.Restore,
-                    title = "Restore from Backup",
-                    subtitle = "Import folders and documents from a backup file",
-                    onClick = if (!isBackingUp && !isRestoring) {
-                        { restorePickerLauncher.launch(arrayOf("application/zip", "application/octet-stream")) }
-                    } else null
-                )
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
 
-                if (isRestoring) {
-                    LinearProgressIndicator(
-                        progress = { (restoreState as RestoreState.InProgress).progress },
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+                    SettingsRow(
+                        icon = Icons.Default.Restore,
+                        title = "Restore from Backup",
+                        subtitle = "Import folders and documents from a backup file",
+                        onClick = if (!isBackingUp && !isRestoring) {
+                            { restorePickerLauncher.launch(arrayOf("application/zip", "application/octet-stream")) }
+                        } else null
                     )
+
+                    if (isRestoring) {
+                        LinearProgressIndicator(
+                            progress = { (restoreState as RestoreState.InProgress).progress },
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+                        )
+                    }
+                } else {
+                    SettingsRow(
+                        icon = Icons.Default.Backup,
+                        title = "Create Backup",
+                        subtitle = "Pro feature",
+                        onClick = {
+                            upgradeTriggerFeature = "Backup & Restore"
+                            showUpgradeSheet = true
+                        }
+                    ) {
+                        Icon(
+                            Icons.Default.Lock,
+                            contentDescription = "Pro",
+                            modifier = Modifier.size(20.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
+                    SettingsRow(
+                        icon = Icons.Default.Restore,
+                        title = "Restore from Backup",
+                        subtitle = "Pro feature",
+                        onClick = {
+                            upgradeTriggerFeature = "Backup & Restore"
+                            showUpgradeSheet = true
+                        }
+                    ) {
+                        Icon(
+                            Icons.Default.Lock,
+                            contentDescription = "Pro",
+                            modifier = Modifier.size(20.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
 
@@ -288,10 +453,103 @@ fun SettingsScreen(
                     title = "YourDocs",
                     subtitle = "Version ${BuildConfig.VERSION_NAME}"
                 )
+                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                SettingsRow(
+                    icon = Icons.Default.Description,
+                    title = "Privacy Policy",
+                    subtitle = "How we handle your data",
+                    onClick = onPrivacyPolicyClick
+                )
+                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                SettingsRow(
+                    icon = Icons.Default.Gavel,
+                    title = "Terms of Service",
+                    subtitle = "Terms and conditions of use",
+                    onClick = onTermsOfServiceClick
+                )
+                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                SettingsRow(
+                    icon = Icons.Default.Feedback,
+                    title = "Send Feedback",
+                    subtitle = "Report issues or suggest improvements",
+                    onClick = {
+                        val subject = "YourDocs Feedback - v${BuildConfig.VERSION_NAME}"
+                        val body = buildString {
+                            appendLine("---")
+                            appendLine("Device: ${Build.MANUFACTURER} ${Build.MODEL}")
+                            appendLine("Android: ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")
+                            appendLine("App Version: ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
+                            appendLine("---")
+                            appendLine()
+                            appendLine("Your feedback:")
+                            appendLine()
+                        }
+                        val intent = Intent(Intent.ACTION_SENDTO).apply {
+                            data = Uri.parse("mailto:")
+                            putExtra(Intent.EXTRA_EMAIL, arrayOf("yourdocsapp@gmail.com"))
+                            putExtra(Intent.EXTRA_SUBJECT, subject)
+                            putExtra(Intent.EXTRA_TEXT, body)
+                        }
+                        try {
+                            context.startActivity(intent)
+                        } catch (_: ActivityNotFoundException) {
+                            Toast.makeText(
+                                context,
+                                "No email app found. Please install one to send feedback.",
+                                Toast.LENGTH_LONG
+                            ).show()
+                        }
+                    }
+                )
             }
 
             Spacer(modifier = Modifier.height(16.dp))
         }
+    }
+
+    // Setup PIN dialog
+    if (showSetupPinDialog) {
+        SetupPinDialog(
+            onDismiss = { showSetupPinDialog = false },
+            onConfirm = { pin ->
+                viewModel.setupPin(pin) { success ->
+                    showSetupPinDialog = false
+                    if (success) {
+                        Toast.makeText(context, "PIN set successfully", Toast.LENGTH_SHORT).show()
+                    } else {
+                        Toast.makeText(context, "Failed to set PIN", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        )
+    }
+
+    // Remove PIN confirmation dialog
+    if (showRemovePinConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showRemovePinConfirmDialog = false },
+            title = { Text("Remove PIN") },
+            text = { Text("This will remove PIN protection. Folders locked with PIN will still be locked but you won't be able to unlock them until you set a new PIN. Continue?") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.removePin()
+                        showRemovePinConfirmDialog = false
+                        Toast.makeText(context, "PIN removed", Toast.LENGTH_SHORT).show()
+                    },
+                    colors = androidx.compose.material3.ButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error
+                    )
+                ) {
+                    Text("Remove")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRemovePinConfirmDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 
     // Restore confirmation dialog
@@ -327,6 +585,20 @@ fun SettingsScreen(
                     Text("Cancel")
                 }
             }
+        )
+    }
+
+    // Upgrade bottom sheet
+    if (showUpgradeSheet) {
+        UpgradeBottomSheet(
+            onDismiss = { showUpgradeSheet = false },
+            onUpgradeClick = {
+                val activity = context as? Activity ?: return@UpgradeBottomSheet
+                viewModel.billingManager.launchPurchaseFlow(activity)
+            },
+            price = productPrice,
+            triggerFeature = upgradeTriggerFeature,
+            onTermsClick = onTermsOfServiceClick
         )
     }
 }

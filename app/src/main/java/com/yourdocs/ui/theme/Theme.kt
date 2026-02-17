@@ -29,17 +29,17 @@ val LocalYourDocsColors = staticCompositionLocalOf { YourDocsColorScheme() }
 private val LightColorScheme = lightColorScheme(
     primary = Teal40,                        // Soft teal
     onPrimary = Color.White,
-    primaryContainer = Teal90,               // Very light teal
+    primaryContainer = WarmTeal90,            // Warm cream container (no blue cast)
     onPrimaryContainer = Teal10,
 
     secondary = LeafGreen,                   // Logo tree green
     onSecondary = Color.White,
-    secondaryContainer = LeafGreenLight,
+    secondaryContainer = Color(0xFFF1F0EB),  // Warm light green-gray (no green tint)
     onSecondaryContainer = Color(0xFF1B5E20),
 
     tertiary = AccentAmber,
     onTertiary = Color.White,
-    tertiaryContainer = Color(0xFFFFEEDB),
+    tertiaryContainer = Color(0xFFFFF3E6),   // Warm cream-peach
     onTertiaryContainer = Color(0xFF2B1700),
 
     error = Error40,
@@ -47,13 +47,13 @@ private val LightColorScheme = lightColorScheme(
     errorContainer = Error90,
     onErrorContainer = Error10,
 
-    background = Cream,                      // Warm cream
+    background = Color(0xFFFFFCF9),          // Creamy white
     onBackground = WarmGray10,
 
-    surface = WarmWhite,                     // Warm white cards
+    surface = Color(0xFFFFFEFB),             // Near-white with warm touch
     onSurface = WarmGray10,
 
-    surfaceVariant = WarmGray95,
+    surfaceVariant = Color(0xFFF5F2EF),      // Warm light gray
     onSurfaceVariant = WarmGray50,
 
     outline = WarmGray80,
