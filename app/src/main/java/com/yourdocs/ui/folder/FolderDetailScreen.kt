@@ -294,7 +294,7 @@ fun FolderDetailScreen(
                             leadingIcon = { Icon(Icons.AutoMirrored.Filled.InsertDriveFile, contentDescription = null) }
                         )
                         DropdownMenuItem(
-                            text = { Text("Import from Gallery") },
+                            text = { Text("Import from Photos") },
                             onClick = { showImportMenu = false; viewModel.onImportFromGallery() },
                             leadingIcon = { Icon(Icons.Default.PhotoLibrary, contentDescription = null) }
                         )

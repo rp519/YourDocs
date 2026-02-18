@@ -31,7 +31,7 @@
     <!-- Import -->
     <string name="import_document">Import Document</string>
     <string name="import_from_files">Import from Files</string>
-    <string name="import_from_gallery">Import from Gallery</string>
+    <string name="import_from_gallery">Import from Photos</string>
     <string name="capture_document">Capture Document</string>
     <string name="importing_document">Importing document\u2026</string>
 
